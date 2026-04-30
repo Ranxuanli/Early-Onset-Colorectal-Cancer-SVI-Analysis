@@ -1,0 +1,648 @@
+---
+title: "visualization_colorectal"
+format:
+  html:
+    toc: true
+    code-fold: true
+editor: source
+execute:
+  echo: true
+  warning: false
+  message: false
+  error: false
+---
+
+```{r setup,message=FALSE,warning=FALSE}
+library(dplyr)
+library(readr)
+#install.packages("janitor")
+library(janitor)
+library(ggplot2)
+```
+
+# Load Raw Export
+
+```{r}
+data_cr_cancer <- read_csv(
+  "/Users/apple/Desktop/me/WCM/semester/research/qiu/smoke/cancer_main_with_RPL.csv",
+  show_col_types = FALSE
+)
+
+df <- read_csv("/Users/apple/Desktop/me/WCM/semester/research/qiu/smoke/cancer_main_with_RPL.csv")
+```
+
+# Define Colorectal Cancer Cohort
+
+```{r warning=FALSE,message=FALSE}
+data_cr_cancer <- data_cr_cancer %>%
+  clean_names()
+
+crc_sites <- c(
+  "Ascending Colon",
+  "Cecum",
+  "Descending Colon",
+  "Hepatic Flexure",
+  "Sigmoid Colon",
+  "Splenic Flexure",
+  "Transverse Colon",
+  "Large Intestine, NOS",
+  "Rectosigmoid Junction",
+  "Rectum"
+)
+
+crc_dat <- data_cr_cancer %>%
+  filter(site_recode_icd_o_3_who_2008 %in% crc_sites)
+```
+
+
+
+
+```{r warning=FALSE,message=FALSE}
+
+
+```
+
+
+
+# Recode Variables
+
+```{r echo=FALSE}
+crc_dat <- crc_dat %>%
+  mutate(
+    age_group_recode = case_when(
+      age_recode_with_1_year_olds %in% c(
+        "00 years", "01-04 years", "05-09 years", "10-14 years", "15-19 years",
+        "20-24 years", "25-29 years"
+      ) ~ "<30",
+      age_recode_with_1_year_olds %in% c(
+        "30-34 years", "35-39 years"
+      ) ~ "30-39",
+      age_recode_with_1_year_olds %in% c(
+        "40-44 years", "45-49 years"
+      ) ~ "40-49",
+      age_recode_with_1_year_olds %in% c(
+        "50-54 years", "55-59 years", "60-64 years"
+      ) ~ "50-64",
+      age_recode_with_1_year_olds %in% c(
+        "65-69 years", "70-74 years", "75-79 years"
+      ) ~ "65-79",
+      age_recode_with_1_year_olds %in% c(
+        "80-84 years", "85+ years"
+      ) ~ "80+",
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+
+```{r}
+crc_dat <- crc_dat %>%
+  filter(year_of_diagnosis >= 2010 & year_of_diagnosis <= 2022)
+#summary(crc_dat)
+```
+
+
+
+
+```{r}
+crc_dat <- crc_dat %>%
+  mutate(
+    age_under50 = case_when(
+      age_group_recode %in% c("<30", "30-39", "40-49") ~ 1,
+      age_group_recode %in% c("50-64", "65-79", "80+") ~ 0,
+      TRUE ~ NA_real_
+    )
+  )
+```
+
+
+```{r warning=FALSE,message=FALSE}
+library(gtsummary)
+
+table_overall <- crc_dat %>%
+  select(
+    age_recode_with_1_year_olds,
+    sex,
+    race_recode_white_black_other,
+    year_of_diagnosis,
+    origin_recode_nhia_hispanic_non_hisp,
+    rpl_themes
+  ) %>%
+  tbl_summary(
+    statistic = list(
+      all_categorical() ~ "{n} ({p}%)",
+      rpl_themes ~ "{median} ({p25}, {p75})"
+    ),
+    digits = rpl_themes ~ 3,
+    missing = "no",#ifany
+    label = list(
+      age_recode_with_1_year_olds ~ "Age",
+      sex ~ "Sex",
+      race_recode_white_black_other ~ "Race",
+      year_of_diagnosis ~ "Year of Diagnosis",
+      origin_recode_nhia_hispanic_non_hisp ~ "Hispanic Origin",
+      rpl_themes ~ "Overall Social Vulnerability (RPL_THEMES)"
+    )
+  ) %>%
+  bold_labels() %>%
+  modify_caption(
+    "**Table 1. Descriptive raw data statistics with overall column distribution**"
+  )
+
+table_overall
+```
+
+
+```{r warning=FALSE,message=FALSE}
+
+table_under50 <- crc_dat %>%
+  filter(age_under50 == 1) %>%
+  select(
+    age_recode_with_1_year_olds,
+    sex,
+    race_recode_white_black_other,
+    year_of_diagnosis,
+    origin_recode_nhia_hispanic_non_hisp,
+    rpl_themes
+  ) %>%
+  tbl_summary(
+    statistic = list(
+      all_categorical() ~ "{n} ({p}%)",
+      rpl_themes ~ "{median} ({p25}, {p75})"
+    ),
+    digits = rpl_themes ~ 3,
+    missing = "ifany",
+    label = list(
+      age_recode_with_1_year_olds ~ "Age",
+      sex ~ "Sex",
+      race_recode_white_black_other ~ "Race",
+      year_of_diagnosis ~ "Year of Diagnosis",
+      origin_recode_nhia_hispanic_non_hisp ~ "Hispanic Origin",
+      rpl_themes ~ "Overall Social Vulnerability (RPL_THEMES)"
+    )
+  ) %>%
+  bold_labels() %>%
+  modify_caption(
+    "**Table 2. Descriptive raw data statistics among colorectal cancer cases aged <50 years**"
+  )
+
+table_under50
+
+```
+
+
+
+### <50 CRC overview
+
+```{r}
+trend_overall <- crc_dat %>%
+  group_by(year_of_diagnosis) %>%
+  summarise(
+    total_n = n(),
+    under50_n = sum(age_under50, na.rm = TRUE),
+    pct_under50 = under50_n / total_n * 100
+  )
+```
+
+
+
+```{r}
+
+
+ggplot(trend_overall, aes(x = year_of_diagnosis, y = pct_under50)) +
+  geom_line(size = 1) +
+  geom_point() +
+  scale_x_continuous(breaks = 2010:2022) +
+  labs(
+    title = "Trend of <50 Colorectal Cancer Patients (2010–2022)",
+    x = "Year",
+    y = "Percentage (%)"
+  ) +
+  theme_minimal()
+```
+
+
+##### CRC Percentage by Under-50 Age Group
+
+
+```{r}
+
+trend_agegroup_pct <- crc_dat %>%
+  filter(age_group_recode %in% c("<30", "30-39", "40-49")) %>%
+  group_by(year_of_diagnosis, age_group_recode) %>%
+  summarise(
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  left_join(
+    crc_dat %>%
+      group_by(year_of_diagnosis) %>%
+      summarise(total_crc = n(), .groups = "drop"),
+    by = "year_of_diagnosis"
+  ) %>%
+  mutate(
+    pct_of_all_crc = n / total_crc * 100
+  )
+
+ggplot(trend_agegroup_pct, aes(x = year_of_diagnosis, y = pct_of_all_crc, color = age_group_recode)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  scale_x_continuous(breaks = 2010:2022) +
+  labs(
+    title = "Trend of CRC Percentage by Under-50 Age Group (2010-2022)",
+    x = "Year",
+    y = "Percentage of all CRC patients (%)",
+    color = "Age group"
+  ) +
+  theme_minimal()
+```
+
+
+
+
+### <50 CRC by sex
+
+
+```{r}
+trend_sex <- crc_dat %>%
+  group_by(year_of_diagnosis, sex) %>%
+  summarise(
+    total_n = sum(!is.na(age_under50)),
+    under50_n = sum(age_under50, na.rm = TRUE),
+    pct_under50 = under50_n / total_n * 100,
+    .groups = "drop"
+  )
+```
+
+```{r}
+ggplot(trend_sex, aes(x = year_of_diagnosis, y = pct_under50, color = sex)) +
+  geom_line(size = 1) +
+  geom_point() +
+  scale_x_continuous(breaks = 2010:2022) +
+  labs(
+    title = "Trend of <50 CRC by Sex",
+    x = "Year",
+    y = "Percentage (%)",
+    color = "Sex"
+  ) +
+  theme_minimal()
+```
+
+
+##### stacked composition
+
+```{r echo=FALSE,include=FALSE}
+trend_under50_age_by_sex <- crc_dat %>%
+  filter(age_group_recode %in% c("<30", "30-39", "40-49")) %>%
+  filter(!is.na(sex)) %>%
+  group_by(year_of_diagnosis, sex, age_group_recode) %>%
+  summarise(
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    age_group_recode = factor(age_group_recode, levels = c("<30", "30-39", "40-49"))
+  )
+ggplot(trend_under50_age_by_sex,
+       aes(x = factor(year_of_diagnosis), y = n, fill = age_group_recode)) +
+  geom_col() +
+  facet_wrap(~ sex) +
+  labs(
+    title = "Under-50 CRC Cases by Age Group and Sex",
+    x = "Year",
+    y = "Number of patients",
+    fill = "Age group"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")
+  )
+```
+
+
+
+
+
+### <50 CRC by race
+
+```{r}
+crc_dat <- crc_dat %>%
+  mutate(
+    race_simple = case_when(
+      race_recode_white_black_other == "Other (American Indian/AK Native, Asian/Pacific Islander)" ~ "Other",
+      race_recode_white_black_other == "Unknown (including other unspec 1991+)" ~ "Unknown",
+      TRUE ~ race_recode_white_black_other
+    )
+  )
+
+trend_race <- crc_dat %>%
+  filter(!is.na(race_simple)) %>%
+  group_by(year_of_diagnosis, race_simple) %>%
+  summarise(
+    total_n = sum(!is.na(age_under50)),
+    under50_n = sum(age_under50, na.rm = TRUE),
+    pct_under50 = under50_n / total_n * 100,
+    .groups = "drop"
+  )
+```
+
+
+
+```{r}
+
+ggplot(trend_race, aes(x = year_of_diagnosis, y = pct_under50, color = race_simple)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  
+  scale_x_continuous(breaks = 2010:2022) +
+  
+  labs(
+    title = "Trend of <50 CRC by Race (2010–2022)",
+    x = "Year",
+    y = "Percentage (%)",
+    color = "Race"
+  ) +
+  
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    plot.title = element_text(face = "bold")
+  )
+```
+
+
+
+##### stacked composition
+
+
+```{r echo=FALSE,include=FALSE}
+trend_under50_age_by_race <- crc_dat %>%
+  filter(age_group_recode %in% c("<30", "30-39", "40-49")) %>%
+  filter(!is.na(race_simple)) %>%
+  group_by(year_of_diagnosis, race_simple, age_group_recode) %>%
+  summarise(
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    age_group_recode = factor(
+      age_group_recode,
+      levels = c("<30", "30-39", "40-49")
+    )
+  )
+
+ggplot(trend_under50_age_by_race,
+       aes(x = year_of_diagnosis, y = n, fill = age_group_recode)) +
+  
+  geom_col() +
+  
+  facet_wrap(~ race_simple) +
+  
+  scale_x_continuous(breaks = 2010:2022) +
+  
+  scale_fill_manual(values = c(
+    "<30" = "#E64B35",
+    "30-39" = "#4DBBD5",
+    "40-49" = "#00A087"
+  )) +
+  
+  labs(
+    title = "Under-50 CRC Cases by Age Group and Race",
+    x = "Year",
+    y = "Number of patients",
+    fill = "Age group"
+  ) +
+  
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold")
+  )
+
+```
+
+
+
+### <50 CRC by Social Vulnerability Index
+
+```{r}
+
+#ggplot(
+#  crc_dat %>% filter(age_under50 == 1),
+#  aes(
+#    x = factor(year_of_diagnosis),
+#    y = rpl_themes
+#  )
+#) +
+#  geom_boxplot() +
+#  labs(
+#    title = "Distribution of Overall RPL_THEMES Among CRC Cases Aged <50",
+#    x = "Year of Diagnosis",
+#    y = "RPL_THEMES"
+#  ) +
+#  theme_minimal(base_size = 14) +
+#  theme(
+#    plot.title = element_text(face = "bold")
+#  )
+
+ggplot(
+  crc_dat %>% 
+    filter(age_under50 == 1),
+  aes(
+    x = year_of_diagnosis,
+    y = rpl_themes
+  )
+) +
+  
+  geom_boxplot(
+    aes(group = year_of_diagnosis),
+    width = 0.6,
+    outlier.alpha = 0.25
+  ) +
+  
+  stat_summary(
+    fun = median,
+    geom = "line",
+    linewidth = 1.2
+  ) +
+  
+  stat_summary(
+    fun = median,
+    geom = "point",
+    size = 2.5
+  ) +
+  
+  # LOESS
+  geom_smooth(
+    method = "loess",
+    se = FALSE,
+    linewidth = 1,
+    linetype = 2
+  ) +
+  
+  scale_x_continuous(
+    breaks = 2010:2022
+  ) +
+  
+  labs(
+    title = "RPL_THEMES Distribution Among CRC Cases Aged <50",
+    subtitle = "Boxplots with median trend across diagnosis years",
+    x = "Year of Diagnosis",
+    y = "RPL_THEMES"
+  ) +
+  
+  theme_classic(base_size = 14) +
+  
+  theme(
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(size = 11),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+```
+
+
+
+```{r include=FALSE}
+
+ggplot(
+  crc_dat %>% filter(age_under50 == 1),
+  aes(
+    x = factor(year_of_diagnosis),
+    y = rpl_themes
+  )
+) +
+  geom_violin(trim = FALSE) +
+  labs(
+    title = "Distribution of RPL_THEMES Among CRC Cases Aged <50",
+    x = "Year",
+    y = "RPL_THEMES"
+  ) +
+  theme_minimal()
+
+```
+
+
+```{r echo=FALSE,include=FALSE}
+crc_dat %>%
+  group_by(age_under50) %>%
+  summarise(
+    n = n(),
+    mean_rpl = mean(rpl_themes, na.rm = TRUE),
+    sd_rpl = sd(rpl_themes, na.rm = TRUE),
+    median_rpl = median(rpl_themes, na.rm = TRUE),
+    p25 = quantile(rpl_themes, 0.25, na.rm = TRUE),
+    p75 = quantile(rpl_themes, 0.75, na.rm = TRUE)
+  )
+
+```
+```{r}
+
+t.test(
+  rpl_themes ~ age_under50,
+  data = crc_dat
+)
+
+
+wilcox.test(
+  rpl_themes ~ age_under50,
+  data = crc_dat
+)
+```
+
+<50 CRC patients have significantly HIGHER social vulnerability.
+
+
+### <50 CRC by Hispanic
+```{r echo=FALSE,include=FALSE}
+
+crc_dat %>%
+  group_by(origin_recode_nhia_hispanic_non_hisp) %>%
+  summarise(
+    n = n(),
+    mean_rpl = mean(rpl_themes, na.rm = TRUE),
+    median_rpl = median(rpl_themes, na.rm = TRUE)
+  )
+
+
+```
+
+
+```{r}
+
+crc_under50 <- crc_dat %>%
+  filter(age_under50 == 1)
+
+wilcox.test(
+  rpl_themes ~ origin_recode_nhia_hispanic_non_hisp,
+  data = crc_under50
+)
+
+```
+Among <50 CRC，Hispanic is more vulnerable.
+
+
+```{r}
+#========================================================
+# Trend of Hispanic proportion among CRC cases aged <50
+#========================================================
+
+trend_hispanic_under50 <- crc_dat %>%
+  filter(age_under50 == 1) %>%
+  mutate(
+    hispanic_group = case_when(
+      origin_recode_nhia_hispanic_non_hisp == "Spanish-Hispanic-Latino" ~ "Hispanic",
+      origin_recode_nhia_hispanic_non_hisp == "Non-Spanish-Hispanic-Latino" ~ "Non-Hispanic",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(hispanic_group)) %>%
+  group_by(year_of_diagnosis, hispanic_group) %>%
+  summarise(
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  left_join(
+    crc_dat %>%
+      filter(age_under50 == 1) %>%
+      group_by(year_of_diagnosis) %>%
+      summarise(
+        total_under50 = n(),
+        .groups = "drop"
+      ),
+    by = "year_of_diagnosis"
+  ) %>%
+  mutate(
+    pct = n / total_under50 * 100
+  )
+
+ggplot(
+  trend_hispanic_under50,
+  aes(
+    x = year_of_diagnosis,
+    y = pct,
+    color = hispanic_group
+  )
+) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  scale_x_continuous(
+    breaks = 2010:2022
+  ) +
+  labs(
+    title = "Trend of Hispanic Proportion Among CRC Cases Aged <50",
+    x = "Year of Diagnosis",
+    y = "Percentage (%)",
+    color = "Group"
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")
+  )
+```
+
+
